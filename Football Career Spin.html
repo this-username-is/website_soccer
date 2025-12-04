@@ -22,6 +22,7 @@
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: white;
+            overflow-x: hidden;
         }
         
         .custom-scrollbar::-webkit-scrollbar {
@@ -41,19 +42,7 @@
             background: rgba(100, 116, 139, 1);
         }
 
-        .animate-spin-slow {
-            animation: spin 3s linear infinite;
-        }
-
-        @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
+        /* Loading & Error Screens */
         #loading-message, #error-log {
             padding: 20px;
             text-align: center;
@@ -69,6 +58,24 @@
             white-space: pre-wrap;
             font-family: monospace;
             font-size: 12px;
+        }
+
+        /* Wheel Specific Animations */
+        .wheel-container {
+            filter: drop-shadow(0 0 15px rgba(0,0,0,0.5));
+        }
+        .pointer {
+            filter: drop-shadow(0 4px 4px rgba(0,0,0,0.3));
+            z-index: 10;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
@@ -92,7 +99,6 @@
     <div id="error-log"></div>
 
     <script>
-        // Global Error Handler to catch loading issues
         window.onerror = function(message, source, lineno, colno, error) {
             const errorDiv = document.getElementById('error-log');
             errorDiv.style.display = 'block';
@@ -100,95 +106,165 @@
             document.getElementById('loading-message').style.display = 'none';
         };
 
-        // Check if React loaded after 3 seconds
         setTimeout(function() {
             if (!window.React || !window.ReactDOM) {
                 const errorDiv = document.getElementById('error-log');
                 errorDiv.style.display = 'block';
-                errorDiv.innerHTML += "<strong>Verbindungsfehler:</strong> React konnte nicht geladen werden. Bitte stelle sicher, dass du Internet hast, da die App Bibliotheken nachladen muss.\n";
+                errorDiv.innerHTML += "<strong>Verbindungsfehler:</strong> React konnte nicht geladen werden.\n";
             }
         }, 3000);
     </script>
 
     <script type="text/babel">
         try {
-            const { useState, useEffect, useRef } = React;
+            const { useState, useEffect, useRef, useMemo } = React;
 
-            // --- ICONS (Inline SVGs to replace Lucide dependency) ---
+            // --- ICONS ---
             const IconBase = ({ children, size = 24, className = "" }) => (
-                <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    width={size} 
-                    height={size} 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    className={className}
-                >
-                    {children}
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
             );
-
             const User = (props) => <IconBase {...props}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconBase>;
             const Trophy = (props) => <IconBase {...props}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></IconBase>;
             const ArrowRightLeft = (props) => <IconBase {...props}><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></IconBase>;
-            const Plane = (props) => <IconBase {...props}><path d="M2 12h5"/><path d="M13 12h8"/><path d="M22 2v20"/><path d="M10 12l2-3h5l-2 3 2 3h-5l-2-3"/></IconBase>; // Simplified plane/arrow
+            const Plane = (props) => <IconBase {...props}><path d="M2 12h5"/><path d="M13 12h8"/><path d="M22 2v20"/><path d="M10 12l2-3h5l-2 3 2 3h-5l-2-3"/></IconBase>;
             const RefreshCw = (props) => <IconBase {...props}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></IconBase>;
             const Shield = (props) => <IconBase {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></IconBase>;
             const Zap = (props) => <IconBase {...props}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></IconBase>;
-            const Footprints = (props) => <IconBase {...props}><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 11 3.8 11 8c0 2.85-1.67 5.12-3 7h3c1.33-1.88 3-4.15 3-7 0-4.2 1.63-6 3.5-6 3.01 0 4.47 3.28 4.5 6 .03 2.5-1 3.5-1 5.62V16"/><path d="M8 22v-3"/><path d="M16 22v-3"/></IconBase>; // Approximated
+            const Footprints = (props) => <IconBase {...props}><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 11 3.8 11 8c0 2.85-1.67 5.12-3 7h3c1.33-1.88 3-4.15 3-7 0-4.2 1.63-6 3.5-6 3.01 0 4.47 3.28 4.5 6 .03 2.5-1 3.5-1 5.62V16"/><path d="M8 22v-3"/><path d="M16 22v-3"/></IconBase>;
             const Activity = (props) => <IconBase {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></IconBase>;
             const Target = (props) => <IconBase {...props}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></IconBase>;
             const Brain = (props) => <IconBase {...props}><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></IconBase>;
 
-
-            // --- DATA & CONFIG ---
-
+            // --- DATA ---
             const LEAGUES = {
               "Bundesliga": ["Bayern München", "BVB", "Leipzig", "Leverkusen", "Stuttgart", "Frankfurt", "Bremen"],
               "Premier League": ["Man City", "Arsenal", "Liverpool", "Man Utd", "Chelsea", "Spurs", "Aston Villa"],
-              "La Liga": ["Real Madrid", "Barcelona", "Atletico", "Sevilla", "Valencia", "Real Sociedad"],
+              "La Liga": ["Real Madrid", "Barcelona", "Atletico", "Sevilla", "Valencia", "Sociedad"],
               "Serie A": ["Inter", "Milan", "Juventus", "Napoli", "Roma", "Lazio"],
               "Ligue 1": ["PSG", "Marseille", "Lyon", "Monaco", "Lille"]
             };
 
             const STAT_EVENTS = [
-              { text: "Hartes Training", effects: { all: 2 } },
-              { text: "Persönlicher Trainer", effects: { all: 3 } },
-              { text: "Verletzungspause", effects: { all: -2 } },
-              { text: "Viraler Skill-Move", effects: { dri: 5, pas: 2 } },
-              { text: "Torriecher entwickelt", effects: { sho: 5, pos: 3 } },
-              { text: "Fitness-Boost", effects: { pac: 4, phy: 4 } },
-              { text: "Taktik-Schulung", effects: { def: 5, pas: 3 } },
-              { text: "Bankdrücker", effects: { all: -1 } },
-              { text: "Durchbruch-Saison", effects: { all: 5 } },
-              { text: "Altersschwäche", effects: { pac: -3, phy: -2 } }, 
+              { text: "+3 Alle", label: "+3 ALL", color: "#22c55e", effects: { all: 3 } },
+              { text: "Verletzt -2", label: "Verletzt", color: "#ef4444", effects: { all: -2 } },
+              { text: "+5 Dribbling", label: "+5 DRI", color: "#3b82f6", effects: { dri: 5, pas: 2 } },
+              { text: "+5 Schuss", label: "+5 SHO", color: "#eab308", effects: { sho: 5, pos: 3 } },
+              { text: "+4 Physis", label: "+4 PHY", color: "#f97316", effects: { pac: 4, phy: 4 } },
+              { text: "+5 Defense", label: "+5 DEF", color: "#6366f1", effects: { def: 5, pas: 3 } },
+              { text: "-1 Bank", label: "-1 Bank", color: "#94a3b8", effects: { all: -1 } },
+              { text: "PRIME +5", label: "PRIME", color: "#a855f7", effects: { all: 5 } },
             ];
 
             const SUCCESS_EVENTS = [
-              "Meisterschaft gewonnen!",
-              "Pokalsieger!",
-              "Torschützenkönig",
-              "Abstieg verhindert",
-              "Champions League Sieger!",
-              "Goldener Schuh",
-              "Spieler des Jahres",
-              "Auf der Bank versauert",
-              "Skandal in der Presse",
-              "Solide Saison im Mittelfeld",
-              "Publikumsliebling",
-              "Kapitänsbinde übernommen"
+              { text: "Meister", color: "#eab308" },
+              { text: "Pokal", color: "#22c55e" },
+              { text: "Abstieg", color: "#ef4444" },
+              { text: "CL Sieger", color: "#3b82f6" },
+              { text: "Bank", color: "#64748b" },
+              { text: "Skandal", color: "#f43f5e" },
+              { text: "Mittelfeld", color: "#94a3b8" },
+              { text: "Kapitän", color: "#8b5cf6" }
             ];
 
-            const INITIAL_STATS = {
-              pac: 60, sho: 55, pas: 58, dri: 62, def: 40, phy: 50
+            const INITIAL_STATS = { pac: 60, sho: 55, pas: 58, dri: 62, def: 40, phy: 50 };
+
+            // --- WHEEL COMPONENT ---
+            const Wheel = ({ items, onSpinComplete, spinning, onRequestSpin, title }) => {
+                const [rotation, setRotation] = useState(0);
+                
+                // Trigger Spin Animation when `spinning` prop changes to TRUE
+                useEffect(() => {
+                    if (spinning) {
+                        // Logic: Spin at least 10 times (3600 deg) + random segment for 5 seconds
+                        const segmentAngle = 360 / items.length;
+                        const randomSegment = Math.floor(Math.random() * items.length);
+                        
+                        // Add extra rotation to land in middle of segment
+                        // We use a large random number of full rotations (10-15) + specific target
+                        const extraRotation = (360 - (randomSegment * segmentAngle)) - (segmentAngle / 2); 
+                        const totalRotation = 3600 + extraRotation + (Math.floor(Math.random() * 3) * 360); 
+                        
+                        setRotation(prev => prev + totalRotation);
+                        
+                        // Wait for CSS animation to finish
+                        const timer = setTimeout(() => {
+                            onSpinComplete(items[randomSegment]);
+                        }, 5000);
+                        
+                        return () => clearTimeout(timer);
+                    }
+                }, [spinning, items, onSpinComplete]);
+
+                // Generate Slices
+                const slices = items.map((item, i) => {
+                    const angle = 360 / items.length;
+                    const rotate = i * angle;
+                    return (
+                        <g key={i} transform={`rotate(${rotate})`}>
+                            <path 
+                                d={`M0,0 L100,0 A100,100 0 0,1 ${100 * Math.cos(angle * Math.PI / 180)},${100 * Math.sin(angle * Math.PI / 180)} Z`} 
+                                fill={item.color || (i % 2 === 0 ? '#1e293b' : '#334155')}
+                                stroke="#0f172a"
+                                strokeWidth="1"
+                            />
+                            <text 
+                                x="60" y="4" 
+                                fill="white" fontSize="7" fontWeight="bold" textAnchor="middle"
+                                transform={`rotate(${angle/2})`}
+                            >
+                                {item.label || item.text || item}
+                            </text>
+                        </g>
+                    );
+                });
+
+                return (
+                    <div className="flex flex-col items-center fade-in">
+                        <h3 className="text-xl font-bold text-yellow-400 mb-4 uppercase tracking-wider">{title}</h3>
+                        
+                        <div className="relative w-64 h-64 md:w-80 md:h-80 wheel-container">
+                            {/* Pointer */}
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-20 pointer">
+                                <div className="w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[30px] border-t-red-600 drop-shadow-lg"></div>
+                            </div>
+
+                            {/* Wheel SVG */}
+                            <div 
+                                style={{ 
+                                    transform: `rotate(${rotation}deg)`,
+                                    transition: spinning ? 'transform 5s cubic-bezier(0.1, 0, 0.2, 1)' : 'none'
+                                }}
+                                className="w-full h-full rounded-full overflow-hidden border-4 border-slate-700 bg-slate-800 shadow-2xl"
+                            >
+                                <svg viewBox="-5 -5 210 210" className="w-full h-full transform -rotate-90">
+                                    <g transform="translate(100,100)">
+                                        {slices}
+                                    </g>
+                                    {/* Center Hub */}
+                                    <circle cx="100" cy="100" r="15" fill="#0f172a" stroke="#cbd5e1" strokeWidth="2" />
+                                    <circle cx="100" cy="100" r="5" fill="#fbbf24" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        {!spinning && (
+                            <button 
+                                onClick={onRequestSpin}
+                                className="mt-8 bg-yellow-500 hover:bg-yellow-400 text-black font-black py-3 px-12 rounded-full text-xl shadow-[0_0_20px_rgba(234,179,8,0.5)] transform hover:scale-105 transition-all animate-bounce"
+                            >
+                                SPIN!
+                            </button>
+                        )}
+                        {spinning && (
+                             <div className="mt-8 text-slate-400 text-sm animate-pulse font-mono">
+                                Dreht...
+                             </div>
+                        )}
+                    </div>
+                );
             };
 
             // --- HELPER COMPONENTS ---
-
             const CardStat = ({ label, value, icon: Icon }) => (
               <div className="flex items-center space-x-1 justify-between w-full px-1">
                 <div className="flex items-center space-x-1 text-xs uppercase opacity-80 font-bold">
@@ -202,45 +278,33 @@
             );
 
             const PlayerCard = ({ player, className = "" }) => {
-              // Calculate OVR 
               const statsArr = Object.values(player.stats);
               const avg = Math.round(statsArr.reduce((a, b) => a + b, 0) / statsArr.length);
               const overall = Math.min(99, Math.max(1, avg)); 
 
-              // Card Type based on Rating
-              let bgClass = "bg-gradient-to-b from-yellow-700 to-yellow-900 border-yellow-600"; // Bronze
-              if (overall >= 75) bgClass = "bg-gradient-to-b from-gray-300 to-gray-500 border-gray-400"; // Silver
-              if (overall >= 80) bgClass = "bg-gradient-to-b from-yellow-400 to-yellow-600 border-yellow-300"; // Gold
-              if (overall >= 90) bgClass = "bg-gradient-to-b from-blue-400 to-purple-600 border-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.6)]"; // Special
+              let bgClass = "bg-gradient-to-b from-yellow-700 to-yellow-900 border-yellow-600";
+              if (overall >= 75) bgClass = "bg-gradient-to-b from-gray-300 to-gray-500 border-gray-400";
+              if (overall >= 80) bgClass = "bg-gradient-to-b from-yellow-400 to-yellow-600 border-yellow-300";
+              if (overall >= 90) bgClass = "bg-gradient-to-b from-blue-400 to-purple-600 border-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.6)]";
 
               return (
-                <div className={`relative w-64 h-96 rounded-t-3xl rounded-b-lg border-4 shadow-2xl flex flex-col items-center text-white select-none transition-all duration-500 transform hover:scale-105 ${bgClass} ${className}`}>
-                  {/* Upper Info */}
+                <div className={`relative w-64 h-96 rounded-t-3xl rounded-b-lg border-4 shadow-2xl flex flex-col items-center text-white select-none transition-all duration-500 transform ${className} ${bgClass}`}>
                   <div className="absolute top-4 left-4 flex flex-col items-center">
                     <span className="text-4xl font-extrabold leading-none drop-shadow-md">{overall}</span>
                     <span className="text-sm font-bold uppercase">{player.position}</span>
-                    {/* Club Logo Placeholder */}
-                    <div className="mt-2 w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-[8px] text-center overflow-hidden">
+                    <div className="mt-2 w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-[8px] text-center overflow-hidden font-bold">
                          {player.club ? player.club.substring(0, 3).toUpperCase() : 'FA'}
                     </div>
-                    {/* Nation Placeholder */}
-                     <div className="mt-1 w-6 h-4 bg-red-600 border border-white/30 rounded-sm shadow-sm"></div>
                   </div>
-
-                  {/* Player Image / Silhouette */}
                   <div className="mt-8 w-32 h-32 relative">
                      <div className="absolute inset-0 bg-black/30 rounded-full filter blur-xl"></div>
                      <User size={128} className="text-black/40 drop-shadow-xl relative z-10" />
                   </div>
-
-                  {/* Name */}
                   <div className="mt-2 w-full text-center px-2">
                     <h2 className="text-2xl font-bold uppercase tracking-wide truncate drop-shadow-md border-b border-white/20 pb-1 mb-1 mx-4">
                       {player.name || "Unknown"}
                     </h2>
                   </div>
-
-                  {/* Stats Grid */}
                   <div className="w-full px-6 grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
                     <CardStat label="PAC" value={player.stats.pac} icon={Zap} />
                     <CardStat label="DRI" value={player.stats.dri} icon={Footprints} />
@@ -249,341 +313,210 @@
                     <CardStat label="PAS" value={player.stats.pas} icon={Brain} />
                     <CardStat label="PHY" value={player.stats.phy} icon={Activity} />
                   </div>
-                  
-                  {/* Bottom Decoration */}
-                  <div className="absolute bottom-4 w-12 h-12 opacity-20">
-                     <Activity size={48} />
-                  </div>
                 </div>
               );
             };
 
-            // --- MAIN GAME COMPONENT ---
-
+            // --- MAIN GAME ---
             const CareerGame = () => {
-              // Game State
-              const [gameState, setGameState] = useState('START'); // START, PLAYING, GAME_OVER
-              const [phase, setPhase] = useState('IDLE'); // IDLE, SPIN_STATS, SPIN_SUCCESS, SPIN_TRANSFER_CHECK, SPIN_LEAGUE, SPIN_CLUB
+              const [gameState, setGameState] = useState('START'); 
+              const [phase, setPhase] = useState('IDLE'); 
               const [year, setYear] = useState(1);
               const [history, setHistory] = useState([]);
+              const [isSpinning, setIsSpinning] = useState(false);
+              const [currentWheelResult, setCurrentWheelResult] = useState(null);
               
-              // Player State
               const [playerName, setPlayerName] = useState("Pro Player");
               const [player, setPlayer] = useState({
-                name: "Pro Player",
-                position: "ST",
-                club: "Free Agent",
-                league: "None",
-                stats: { ...INITIAL_STATS }
+                name: "Pro Player", position: "ST", club: "Free Agent", league: "None", stats: { ...INITIAL_STATS }
               });
 
-              // Animation State
-              const [spinMessage, setSpinMessage] = useState("");
-              const [spinValue, setSpinValue] = useState(null); // The result of the current spin
-              const [isSpinning, setIsSpinning] = useState(false);
-
-              // --- ACTIONS ---
-
+              // --- LOGIC ---
               const startGame = () => {
                 setPlayer(prev => ({ ...prev, name: playerName, club: "Jugendakademie", league: "Nachwuchs" }));
                 setYear(1);
                 setHistory([]);
                 setGameState('PLAYING');
                 setPhase('READY_FOR_YEAR');
+                setCurrentWheelResult(null);
+                setIsSpinning(false);
               };
 
               const updateStats = (effects) => {
                 setPlayer(prev => {
                   const newStats = { ...prev.stats };
                   if (effects.all) {
-                    Object.keys(newStats).forEach(key => {
-                      newStats[key] = Math.min(99, Math.max(1, newStats[key] + effects.all));
-                    });
+                    Object.keys(newStats).forEach(key => newStats[key] = Math.min(99, Math.max(1, newStats[key] + effects.all)));
                   } else {
-                    Object.keys(effects).forEach(key => {
-                       if(newStats[key] !== undefined) {
-                         newStats[key] = Math.min(99, Math.max(1, newStats[key] + effects[key]));
-                       }
-                    });
+                    Object.keys(effects).forEach(key => { if(newStats[key] !== undefined) newStats[key] = Math.min(99, Math.max(1, newStats[key] + effects[key])); });
                   }
                   return { ...prev, stats: newStats };
                 });
               };
 
-              // --- SPINNER LOGIC ---
-              
-              const performSpin = async (options, onComplete, duration = 1500) => {
-                setIsSpinning(true);
-                const intervalTime = 100;
-                const endTime = Date.now() + duration;
-                
-                // Fallback if options is array of strings or objects
-                const isObj = typeof options[0] === 'object';
-                
-                const interval = setInterval(() => {
-                  const randomOpt = options[Math.floor(Math.random() * options.length)];
-                  setSpinValue(isObj ? randomOpt.text : randomOpt);
-                }, intervalTime);
-
-                setTimeout(() => {
-                  clearInterval(interval);
-                  // Final pick
-                  const finalPick = options[Math.floor(Math.random() * options.length)];
-                  setSpinValue(isObj ? finalPick.text : finalPick);
-                  setIsSpinning(false);
-                  onComplete(finalPick);
-                }, duration);
+              // --- ACTIONS ---
+              const requestSpin = () => {
+                  setIsSpinning(true);
+                  setCurrentWheelResult(null);
               };
 
-              const nextPhase = () => {
-                if (phase === 'READY_FOR_YEAR') {
-                  setPhase('SPIN_STATS');
-                  setSpinMessage("Wie läuft deine Entwicklung?");
-                } else if (phase === 'STATS_DONE') {
-                  setPhase('SPIN_SUCCESS');
-                  setSpinMessage("Was war dein Highlight?");
-                } else if (phase === 'SUCCESS_DONE') {
-                  setPhase('SPIN_TRANSFER_CHECK');
-                  setSpinMessage("Steht ein Transfer an?");
-                } else if (phase === 'TRANSFER_CHECK_DONE') {
-                  // Logic handled in button
-                } else if (phase === 'TRANSFER_DESTINATION_DONE' || phase === 'NO_TRANSFER') {
+              const handleSpinComplete = (result) => {
+                  // Animation finished, show result
+                  setIsSpinning(false);
+                  setCurrentWheelResult(result);
+              };
+
+              const proceedToNextPhase = () => {
+                  // Apply Logic based on current phase and result
+                  if (phase === 'SPIN_STATS') {
+                      updateStats(currentWheelResult.effects);
+                      addToHistory(`Jahr ${year}: ${currentWheelResult.text}`);
+                      setPhase('SPIN_SUCCESS');
+                  } 
+                  else if (phase === 'SPIN_SUCCESS') {
+                      addToHistory(`Erfolg: ${currentWheelResult.text}`);
+                      setPhase('SPIN_TRANSFER_CHECK');
+                  } 
+                  else if (phase === 'SPIN_TRANSFER_CHECK') {
+                      if (currentWheelResult.text === "WECHSEL") {
+                          setPhase('SPIN_LEAGUE');
+                      } else {
+                          addToHistory(`Bleibt bei ${player.club}`);
+                          nextYear();
+                          return; // Exit early as we are done with this year
+                      }
+                  } 
+                  else if (phase === 'SPIN_LEAGUE') {
+                      // Result was league name
+                      // Intermediate state not strictly needed if we just switch wheel
+                      setPlayer(p => ({...p, league: currentWheelResult.text}));
+                      setPhase('SPIN_CLUB');
+                  }
+                  else if (phase === 'SPIN_CLUB') {
+                      setPlayer(p => ({ ...p, club: currentWheelResult.text }));
+                      addToHistory(`Transfer zu ${currentWheelResult.text}`);
+                      nextYear();
+                      return;
+                  }
+                  
+                  // Reset for next wheel
+                  setCurrentWheelResult(null);
+              };
+
+              const addToHistory = (text) => setHistory(prev => [text, ...prev]);
+              
+              const nextYear = () => {
                   setPhase('READY_FOR_YEAR');
                   setYear(y => y + 1);
-                  setSpinValue(null);
+                  setCurrentWheelResult(null);
+                  setIsSpinning(false);
+              };
+
+              // --- RENDER ACTION AREA ---
+              const renderActionArea = () => {
+                // If we have a result and are not spinning, show the Result Card
+                if (!isSpinning && currentWheelResult) {
+                    return (
+                         <div className="text-center fade-in">
+                            <h3 className="text-slate-400 mb-2 uppercase tracking-widest text-sm">Ergebnis</h3>
+                            <div className="text-3xl font-black text-white mb-6 p-6 bg-slate-800 border-2 border-yellow-500 rounded-xl shadow-[0_0_30px_rgba(234,179,8,0.2)]">
+                                {currentWheelResult.text || currentWheelResult}
+                            </div>
+                            <button 
+                                onClick={proceedToNextPhase} 
+                                className="bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-12 rounded-full shadow-lg transform hover:scale-105 transition-all"
+                            >
+                                Weiter
+                            </button>
+                         </div>
+                    );
+                }
+
+                // Otherwise show the appropriate Wheel
+                switch(phase) {
+                  case 'READY_FOR_YEAR':
+                    return (
+                      <div className="text-center fade-in">
+                        <h2 className="text-3xl font-bold text-white mb-2">Saison {year}</h2>
+                        <p className="text-slate-400 mb-6">Zeit zu glänzen!</p>
+                        <button onClick={() => setPhase('SPIN_STATS')} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 px-12 rounded-full text-xl shadow-lg transform hover:-translate-y-1 transition-all">
+                          Jahr Starten
+                        </button>
+                      </div>
+                    );
+                  
+                  case 'SPIN_STATS':
+                    return <Wheel title="Training" items={STAT_EVENTS} spinning={isSpinning} onRequestSpin={requestSpin} onSpinComplete={handleSpinComplete} />;
+                  
+                  case 'SPIN_SUCCESS':
+                    return <Wheel title="Saison Highlight" items={SUCCESS_EVENTS} spinning={isSpinning} onRequestSpin={requestSpin} onSpinComplete={handleSpinComplete} />;
+                  
+                  case 'SPIN_TRANSFER_CHECK':
+                     const transferOptions = [
+                         { text: "BLEIBEN", color: "#475569" }, 
+                         { text: "WECHSEL", color: "#22c55e" },
+                         { text: "BLEIBEN", color: "#475569" },
+                         { text: "WECHSEL", color: "#22c55e" }
+                     ];
+                    return <Wheel title="Transfermarkt" items={transferOptions} spinning={isSpinning} onRequestSpin={requestSpin} onSpinComplete={handleSpinComplete} />;
+                  
+                  case 'SPIN_LEAGUE':
+                    const leagueOptions = Object.keys(LEAGUES).map((l, i) => ({ text: l, color: i%2===0 ? '#3b82f6' : '#2563eb' }));
+                    return <Wheel title="Neue Liga" items={leagueOptions} spinning={isSpinning} onRequestSpin={requestSpin} onSpinComplete={handleSpinComplete} />;
+                  
+                  case 'SPIN_CLUB':
+                    const clubOptions = LEAGUES[player.league].map((c, i) => ({ text: c, color: i%2===0 ? '#ef4444' : '#dc2626' }));
+                    return <Wheel title={`Verein in ${player.league}`} items={clubOptions} spinning={isSpinning} onRequestSpin={requestSpin} onSpinComplete={handleSpinComplete} />;
+                  
+                  default:
+                    return <div>...</div>;
                 }
               };
-
-              // --- PHASE HANDLERS ---
-
-              const handleSpinStats = () => {
-                performSpin(STAT_EVENTS, (result) => {
-                  updateStats(result.effects);
-                  addToHistory(`Jahr ${year}: ${result.text}`);
-                  setPhase('STATS_DONE');
-                });
-              };
-
-              const handleSpinSuccess = () => {
-                performSpin(SUCCESS_EVENTS, (result) => {
-                  addToHistory(`Erfolg: ${result}`);
-                  setPhase('SUCCESS_DONE');
-                });
-              };
-
-              const handleSpinTransferCheck = () => {
-                const options = ["BLEIBEN", "TRANSFER", "BLEIBEN", "TRANSFER"]; 
-                performSpin(options, (result) => {
-                  if (result === "TRANSFER") {
-                    setPhase('SPIN_LEAGUE');
-                    setSpinMessage("Wohin geht die Reise?");
-                  } else {
-                    addToHistory(`Bleibt bei ${player.club}`);
-                    setPhase('NO_TRANSFER');
-                  }
-                });
-              };
-
-              const handleSpinLeague = () => {
-                const leagues = Object.keys(LEAGUES);
-                performSpin(leagues, (league) => {
-                    // Immediately spin club after league
-                    setSpinMessage(`Liga: ${league}. Welcher Verein?`);
-                    setSpinValue(league); // Keep league visible
-                    setTimeout(() => {
-                        const clubs = LEAGUES[league];
-                        performSpin(clubs, (club) => {
-                            setPlayer(p => ({ ...p, club: club, league: league }));
-                            addToHistory(`Transfer zu ${club} (${league})`);
-                            setPhase('TRANSFER_DESTINATION_DONE');
-                        }, 1000);
-                    }, 1000);
-                });
-              };
-
-              const addToHistory = (text) => {
-                setHistory(prev => [text, ...prev]);
-              };
-
-              // --- RENDERERS ---
 
               if (gameState === 'START') {
                 return (
                   <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
                     <div className="max-w-md w-full bg-slate-800 p-8 rounded-2xl shadow-xl border border-slate-700 text-center">
                       <Trophy size={64} className="mx-auto text-yellow-400 mb-6" />
-                      <h1 className="text-4xl font-black mb-2 tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
-                        CAREER SPIN
-                      </h1>
-                      <p className="text-slate-400 mb-8">Erstelle deinen Star und drehe am Rad des Schicksals.</p>
-                      
+                      <h1 className="text-4xl font-black mb-2 tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">CAREER SPIN</h1>
                       <div className="mb-6 text-left">
                         <label className="block text-sm font-bold text-slate-300 mb-2">Spielername</label>
-                        <input 
-                          type="text" 
-                          value={playerName}
-                          onChange={(e) => setPlayerName(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-600 rounded-lg py-3 px-4 focus:outline-none focus:border-yellow-500 transition-colors text-lg font-semibold"
-                          placeholder="Z.B. CR7 Junior"
-                        />
+                        <input type="text" value={playerName} onChange={(e) => setPlayerName(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded-lg py-3 px-4 focus:outline-none focus:border-yellow-500 text-lg font-semibold" placeholder="Name eingeben..." />
                       </div>
-
-                      <button 
-                        onClick={startGame}
-                        className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-4 rounded-xl text-xl shadow-lg transform active:scale-95 transition-all flex items-center justify-center gap-2"
-                      >
-                        Karriere Starten <ArrowRightLeft size={20} />
-                      </button>
+                      <button onClick={startGame} className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-4 rounded-xl text-xl shadow-lg transform active:scale-95 transition-all">Karriere Starten</button>
                     </div>
                   </div>
                 );
               }
 
-              // Determine current interaction based on phase
-              const renderActionArea = () => {
-                if (isSpinning) {
-                  return (
-                    <div className="bg-slate-800 rounded-xl p-8 border-2 border-yellow-500/50 shadow-[0_0_30px_rgba(234,179,8,0.2)] text-center animate-pulse">
-                      <h3 className="text-yellow-500 text-sm font-bold uppercase tracking-widest mb-4">{spinMessage}</h3>
-                      <div className="text-3xl md:text-5xl font-black text-white truncate min-h-[3.5rem]">
-                        {spinValue || "..."}
-                      </div>
-                    </div>
-                  );
-                }
-
-                switch(phase) {
-                  case 'READY_FOR_YEAR':
-                    return (
-                      <div className="text-center">
-                        <h2 className="text-3xl font-bold text-white mb-2">Saison {year} Starten</h2>
-                        <p className="text-slate-400 mb-6">Bist du bereit für das nächste Jahr?</p>
-                        <button onClick={nextPhase} className="bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-12 rounded-full text-xl shadow-lg transform hover:-translate-y-1 transition-all">
-                          Jahr Starten
-                        </button>
-                      </div>
-                    );
-                  case 'SPIN_STATS':
-                    return (
-                      <div className="text-center">
-                        <h2 className="text-2xl font-bold text-white mb-4">Entwicklung</h2>
-                        <button onClick={handleSpinStats} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-6 px-12 rounded-xl text-2xl shadow-xl w-full max-w-sm flex items-center justify-center gap-3 mx-auto">
-                          <Zap /> Werte Drehen
-                        </button>
-                      </div>
-                    );
-                  case 'STATS_DONE':
-                    return (
-                       <div className="text-center">
-                        <div className="text-green-400 text-xl font-bold mb-4">{spinValue}</div>
-                        <button onClick={nextPhase} className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-8 rounded-lg">
-                          Weiter
-                        </button>
-                      </div>
-                    );
-                  case 'SPIN_SUCCESS':
-                    return (
-                      <div className="text-center">
-                        <h2 className="text-2xl font-bold text-white mb-4">Saison Highlight</h2>
-                        <button onClick={handleSpinSuccess} className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-6 px-12 rounded-xl text-2xl shadow-xl w-full max-w-sm flex items-center justify-center gap-3 mx-auto">
-                          <Trophy /> Event Drehen
-                        </button>
-                      </div>
-                    );
-                  case 'SUCCESS_DONE':
-                    return (
-                       <div className="text-center">
-                        <div className="text-purple-300 text-xl font-bold mb-4">{spinValue}</div>
-                        <button onClick={nextPhase} className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-8 rounded-lg">
-                          Transfer Check
-                        </button>
-                      </div>
-                    );
-                  case 'SPIN_TRANSFER_CHECK':
-                    return (
-                      <div className="text-center">
-                        <h2 className="text-2xl font-bold text-white mb-4">Transfer Markt</h2>
-                        <button onClick={handleSpinTransferCheck} className="bg-orange-600 hover:bg-orange-500 text-white font-bold py-6 px-12 rounded-xl text-2xl shadow-xl w-full max-w-sm flex items-center justify-center gap-3 mx-auto">
-                          <Plane /> Angebote prüfen
-                        </button>
-                      </div>
-                    );
-                  case 'SPIN_LEAGUE':
-                    return (
-                       <div className="text-center">
-                        <h2 className="text-2xl font-bold text-white mb-4">Du wechselst!</h2>
-                        <button onClick={handleSpinLeague} className="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-6 px-12 rounded-xl text-2xl shadow-xl w-full max-w-sm flex items-center justify-center gap-3 mx-auto">
-                          <RefreshCw className="animate-spin-slow" /> Ziel ermitteln
-                        </button>
-                      </div>
-                    );
-                  case 'NO_TRANSFER':
-                  case 'TRANSFER_DESTINATION_DONE':
-                    return (
-                       <div className="text-center">
-                        <div className="text-2xl font-bold text-white mb-2">
-                            {phase === 'NO_TRANSFER' ? "Vereinstreue!" : "Willkommen beim neuen Club!"}
-                        </div>
-                        {phase !== 'NO_TRANSFER' && <div className="text-yellow-400 text-xl mb-4">{spinValue}</div>}
-                        
-                        <button onClick={nextPhase} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 px-8 rounded-lg mt-4">
-                          Saison beenden
-                        </button>
-                      </div>
-                    );
-                  default:
-                    return <div>Error State</div>;
-                }
-              };
-
               return (
-                <div className="min-h-screen bg-slate-900 text-white p-4 md:p-8 font-sans">
+                <div className="min-h-screen bg-slate-900 text-white p-2 md:p-8 font-sans overflow-hidden">
                   <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    
-                    {/* LEFT COLUMN: Player Card */}
-                    <div className="lg:col-span-4 flex flex-col items-center justify-start pt-4">
-                       <PlayerCard player={player} className="transform scale-100 md:scale-110" />
-                       
-                       <div className="mt-12 w-full bg-slate-800 p-4 rounded-xl border border-slate-700">
-                         <div className="flex justify-between items-center mb-2">
-                           <span className="text-slate-400 text-sm uppercase font-bold">Aktueller Verein</span>
-                         </div>
-                         <div className="text-xl font-bold text-white">{player.club}</div>
-                         <div className="text-sm text-slate-400">{player.league}</div>
-                       </div>
+                    {/* CARD */}
+                    <div className="lg:col-span-4 flex justify-center pt-4">
+                       <PlayerCard player={player} className="transform scale-90 md:scale-110 origin-top" />
                     </div>
-
-                    {/* CENTER COLUMN: Game Area */}
-                    <div className="lg:col-span-5 flex flex-col justify-center min-h-[400px]">
-                      {/* Progress Bar / Year Indicator */}
-                      <div className="mb-8 flex justify-center">
-                         <div className="bg-slate-800 px-6 py-2 rounded-full border border-slate-600 flex items-center gap-2 shadow-lg">
-                            <span className="text-slate-400 text-xs font-bold uppercase">Saison</span>
-                            <span className="text-2xl font-black text-white">{year}</span>
-                         </div>
+                    
+                    {/* GAME AREA - WHEELS */}
+                    <div className="lg:col-span-5 flex flex-col items-center min-h-[500px]">
+                      <div className="mb-4 bg-slate-800 px-6 py-2 rounded-full border border-slate-600 flex items-center gap-2 shadow-lg">
+                        <span className="text-slate-400 text-xs font-bold uppercase">Saison</span>
+                        <span className="text-2xl font-black text-white">{year}</span>
                       </div>
-
-                      {/* Action Box */}
-                      <div className="w-full">
+                      <div className="w-full flex justify-center items-center flex-1">
                         {renderActionArea()}
                       </div>
                     </div>
 
-                    {/* RIGHT COLUMN: History */}
-                    <div className="lg:col-span-3 bg-slate-800/50 rounded-2xl border border-slate-700 p-6 max-h-[600px] overflow-y-auto custom-scrollbar">
-                      <h3 className="text-slate-400 font-bold uppercase text-xs mb-4 tracking-wider flex items-center gap-2">
-                        <Activity size={14} /> Karriere Verlauf
-                      </h3>
-                      <div className="space-y-3">
-                        {history.length === 0 && <span className="text-slate-600 italic text-sm">Deine Legende beginnt heute...</span>}
+                    {/* HISTORY */}
+                    <div className="lg:col-span-3 bg-slate-800/50 rounded-2xl border border-slate-700 p-4 h-48 lg:h-auto overflow-y-auto custom-scrollbar">
+                      <h3 className="text-slate-400 font-bold uppercase text-xs mb-4 tracking-wider flex items-center gap-2"><Activity size={14} /> Verlauf</h3>
+                      <div className="space-y-2">
                         {history.map((item, i) => (
-                          <div key={i} className="bg-slate-800 p-3 rounded-lg border-l-4 border-yellow-500 shadow-sm text-sm">
-                            {item}
-                          </div>
+                          <div key={i} className="bg-slate-800 p-2 rounded border-l-4 border-yellow-500 text-xs">{item}</div>
                         ))}
                       </div>
                     </div>
-
                   </div>
                 </div>
               );
